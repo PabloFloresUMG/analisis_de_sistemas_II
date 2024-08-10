@@ -1,8 +1,10 @@
-﻿using System;
+﻿//Form hecho por Pablo Cesar Flores Marroquín || 0901-21-3546
+using System;
 using System.Windows.Forms;
 using MySql.Data.MySqlClient;
 using System.IO;
 using System.Drawing;
+using System.Text.RegularExpressions;
 
 namespace AdminRepartoApp
 {
@@ -17,7 +19,11 @@ namespace AdminRepartoApp
 
         private void frmVerProductos_Load(object sender, EventArgs e)
         {
-            // Configurar la cadena de conexión
+            CargarProductos();
+        }
+
+        private void CargarProductos()
+        {
             string connectionString = "Server=127.0.0.1;Database=comercioelectronico;Uid=root;Pwd=161101;";
             using (MySqlConnection connection = new MySqlConnection(connectionString))
             {
@@ -55,8 +61,11 @@ namespace AdminRepartoApp
 
             // Obtener el producto seleccionado
             string nombreProducto = cmbBuscarProducto.SelectedItem.ToString();
+            CargarProducto(nombreProducto);
+        }
 
-            // Configurar la cadena de conexión
+        private void CargarProducto(string nombreProducto)
+        {
             string connectionString = "Server=127.0.0.1;Database=comercioelectronico;Uid=root;Pwd=161101;";
             using (MySqlConnection connection = new MySqlConnection(connectionString))
             {
@@ -114,6 +123,11 @@ namespace AdminRepartoApp
 
         private void btnUpdate_Click_1(object sender, EventArgs e)
         {
+            if (!ValidarCampos())
+            {
+                return;
+            }
+
             if (cmbBuscarProducto.SelectedItem == null)
             {
                 MessageBox.Show("Seleccione un producto para actualizar.");
@@ -209,6 +223,61 @@ namespace AdminRepartoApp
             }
         }
 
+        private void btnCargarImagen_Click_1(object sender, EventArgs e)
+        {
+            if (cmbBuscarProducto.SelectedItem == null)
+            {
+                MessageBox.Show("Seleccione un producto para cambiar la imagen.");
+                return;
+            }
+
+            OpenFileDialog openFileDialog = new OpenFileDialog();
+            openFileDialog.Filter = "Image Files|*.jpg;*.jpeg;*.png;*.bmp *.webp";
+
+            if (openFileDialog.ShowDialog() == DialogResult.OK)
+            {
+                string imagePath = openFileDialog.FileName;
+                pbImagenProducto.Image = Image.FromFile(imagePath);
+                txtImagenPath.Text = imagePath; // Actualiza la ruta de la imagen
+
+                // Actualizar imagen en la base de datos
+                string nombreProducto = cmbBuscarProducto.SelectedItem.ToString();
+                string connectionString = "Server=127.0.0.1;Database=comercioelectronico;Uid=root;Pwd=161101;";
+                using (MySqlConnection connection = new MySqlConnection(connectionString))
+                {
+                    try
+                    {
+                        connection.Open();
+
+                        byte[] imageBytes = null;
+                        if (!string.IsNullOrEmpty(txtImagenPath.Text))
+                        {
+                            imageBytes = File.ReadAllBytes(txtImagenPath.Text);
+                        }
+
+                        string query = "UPDATE Producto SET Imagen_Producto = @imagen WHERE Nombre_Producto = @nombreProducto";
+                        MySqlCommand cmd = new MySqlCommand(query, connection);
+                        cmd.Parameters.AddWithValue("@imagen", imageBytes);
+                        cmd.Parameters.AddWithValue("@nombreProducto", nombreProducto);
+
+                        int rowsAffected = cmd.ExecuteNonQuery();
+                        if (rowsAffected > 0)
+                        {
+                            MessageBox.Show("Imagen del producto actualizada exitosamente.");
+                        }
+                        else
+                        {
+                            MessageBox.Show("No se pudo actualizar la imagen del producto.");
+                        }
+                    }
+                    catch (MySqlException ex)
+                    {
+                        MessageBox.Show("Error al actualizar la imagen del producto: " + ex.Message);
+                    }
+                }
+            }
+        }
+
         private void HabilitarCampos(bool habilitar)
         {
             txtNombreProducto.Enabled = habilitar;
@@ -227,6 +296,7 @@ namespace AdminRepartoApp
             pbImagenProducto.Enabled = habilitar;
             btnUpdate.Enabled = habilitar;
             btnEliminarProducto.Enabled = habilitar;
+            btnCargarImagen.Enabled = habilitar; // Habilitar o deshabilitar el botón de cargar imagen
         }
 
         private void LimpiarCampos()
@@ -245,6 +315,80 @@ namespace AdminRepartoApp
             txtNombrePresentacion.Clear();
             txtDescripcionPresentacion.Clear();
             pbImagenProducto.Image = null;
+            txtImagenPath.Clear(); // Limpiar el TextBox de la ruta de imagen
+        }
+
+        private bool ValidarCampos()
+        {
+            try
+            {
+                // Validar que los campos de texto no estén vacíos
+                if (string.IsNullOrWhiteSpace(txtNombreProducto.Text) ||
+                    string.IsNullOrWhiteSpace(txtDetalleProducto.Text) ||
+                    string.IsNullOrWhiteSpace(txtPrecioProducto.Text) ||
+                    string.IsNullOrWhiteSpace(txtPaisFabricante.Text) ||
+                    string.IsNullOrWhiteSpace(txtIVA.Text) ||
+                    string.IsNullOrWhiteSpace(txtComentariosProducto.Text) ||
+                    string.IsNullOrWhiteSpace(txtStock.Text) ||
+                    string.IsNullOrWhiteSpace(txtMarca.Text) ||
+                    string.IsNullOrWhiteSpace(txtPaisMarca.Text) ||
+                    string.IsNullOrWhiteSpace(txtContactoMarca.Text) ||
+                    string.IsNullOrWhiteSpace(txtNombrePresentacion.Text) ||
+                    string.IsNullOrWhiteSpace(txtDescripcionPresentacion.Text) ||
+                    cmbTipoUM.SelectedItem == null)
+                {
+                    MessageBox.Show("Por favor, complete todos los campos.");
+                    return false;
+                }
+
+                // Validar que el precio y el IVA sean números válidos
+                if (!decimal.TryParse(txtPrecioProducto.Text, out decimal precio) || precio < 0)
+                {
+                    MessageBox.Show("Por favor, ingrese un precio válido.");
+                    return false;
+                }
+
+                if (!decimal.TryParse(txtIVA.Text, out decimal iva) || iva < 0)
+                {
+                    MessageBox.Show("Por favor, ingrese un valor de IVA válido.");
+                    return false;
+                }
+
+                // Validar que el stock sea un número entero
+                if (!int.TryParse(txtStock.Text, out int stock) || stock < 0)
+                {
+                    MessageBox.Show("Por favor, ingrese un valor de stock válido.");
+                    return false;
+                }
+
+                // Validar que el nombre del producto pueda contener letras, números, espacios, tildes y ñ
+                if (!Regex.IsMatch(txtNombreProducto.Text, @"^[a-zA-Z0-9ñÑ\sáéíóúÁÉÍÓÚ]+$"))
+                {
+                    MessageBox.Show("El nombre del producto contiene caracteres no válidos.");
+                    return false;
+                }
+
+                // Validar que los comentarios puedan contener tildes y ñ
+                if (!Regex.IsMatch(txtComentariosProducto.Text, @"^[a-zA-Z0-9ñÑ\sáéíóúÁÉÍÓÚ.,]+$"))
+                {
+                    MessageBox.Show("Los comentarios contienen caracteres no válidos.");
+                    return false;
+                }
+
+                // Validar que los contactos de marca no contengan caracteres especiales no deseados
+                if (!Regex.IsMatch(txtContactoMarca.Text, @"^[a-zA-Z0-9ñÑ\sáéíóúÁÉÍÓÚ.,@]+$"))
+                {
+                    MessageBox.Show("Los contactos de marca contienen caracteres no válidos.");
+                    return false;
+                }
+
+                return true;
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show("Ocurrió un error durante la validación: " + ex.Message);
+                return false;
+            }
         }
     }
 }
